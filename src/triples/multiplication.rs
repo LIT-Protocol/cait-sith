@@ -54,18 +54,19 @@ pub async fn multiplication_sender<'a, C: CSCurve>(
     Ok(gamma0 + gamma1)
 }
 
-pub async fn multiplication_sender_many<'a, C: CSCurve, const N: usize>(
+pub async fn multiplication_sender_many<'a, C: CSCurve>(
     ctx: Context<'a>,
     chan: PrivateChannel,
     sid: &[Digest],
     a_iv: &[C::Scalar],
     b_iv: &[C::Scalar],
+    batch_size: usize
 ) -> Result<Vec<C::Scalar>, ProtocolError> {
-    assert!(N > 0);
+    assert!(batch_size > 0);
     let mut ret = vec![];
     // First, run a fresh batch random OT ourselves
-    let dkv = batch_random_ot_receiver_many::<C, N>(ctx.clone(), chan.child(0)).await?;
-    for i in 0..N {
+    let dkv = batch_random_ot_receiver_many::<C>(ctx.clone(), chan.child(0), batch_size).await?;
+    for i in 0..batch_size {
         let (delta, k) = &dkv[i];
         let a_i = &a_iv[i];
         let b_i = &b_iv[i];
@@ -132,18 +133,19 @@ pub async fn multiplication_receiver<'a, C: CSCurve>(
     Ok(gamma0 + gamma1)
 }
 
-pub async fn multiplication_receiver_many<'a, C: CSCurve, const N: usize>(
+pub async fn multiplication_receiver_many<'a, C: CSCurve>(
     ctx: Context<'a>,
     chan: PrivateChannel,
     sid: &[Digest],
     a_iv: &[C::Scalar],
     b_iv: &[C::Scalar],
+    batch_size: usize,
 ) -> Result<Vec<C::Scalar>, ProtocolError> {
-    assert!(N > 0);
+    assert!(batch_size > 0);
     let mut ret = vec![];
     // First, run a fresh batch random OT ourselves
-    let dkv = batch_random_ot_sender_many::<C, N>(ctx.clone(), chan.child(0)).await?;
-    for i in 0..N {
+    let dkv = batch_random_ot_sender_many::<C>(ctx.clone(), chan.child(0), batch_size).await?;
+    for i in 0..batch_size {
         let (k0, k1) = &dkv[i];
         let a_i = &a_iv[i];
         let b_i = &b_iv[i];
@@ -205,15 +207,16 @@ pub async fn multiplication<C: CSCurve>(
     Ok(out)
 }
 
-pub async fn multiplication_many<C: CSCurve, const N: usize>(
+pub async fn multiplication_many<C: CSCurve>(
     ctx: Context<'_>,
     sid: Vec<Digest>,
     participants: ParticipantList,
     me: Participant,
     av_iv: Vec<C::Scalar>,
     bv_iv: Vec<C::Scalar>,
+    batch_size: usize,
 ) -> Result<Vec<C::Scalar>, ProtocolError> {
-    assert!(N > 0);
+    assert!(batch_size > 0);
     let sid_arc = Arc::new(sid);
     let av_iv_arc = Arc::new(av_iv);
     let bv_iv_arc = Arc::new(bv_iv);
@@ -227,21 +230,23 @@ pub async fn multiplication_many<C: CSCurve, const N: usize>(
             let chan = ctx.private_channel(me, p);
             async move {
                 if p < me {
-                    multiplication_sender_many::<C, N>(
+                    multiplication_sender_many::<C>(
                         ctx,
                         chan,
                         sid_arc.as_slice(),
                         av_iv_arc.as_slice(),
                         bv_iv_arc.as_slice(),
+                        batch_size,
                     )
                     .await
                 } else {
-                    multiplication_receiver_many::<C, N>(
+                    multiplication_receiver_many::<C>(
                         ctx,
                         chan,
                         sid_arc.as_slice(),
                         av_iv_arc.as_slice(),
                         bv_iv_arc.as_slice(),
+                        batch_size
                     )
                     .await
                 }
@@ -250,7 +255,7 @@ pub async fn multiplication_many<C: CSCurve, const N: usize>(
         tasks.push(ctx.spawn(fut));
     }
     let mut outs = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         let av_i = &av_iv_arc.as_slice()[i];
         let bv_i = &bv_iv_arc.as_slice()[i];
         let out = *av_i * *bv_i;
@@ -258,7 +263,7 @@ pub async fn multiplication_many<C: CSCurve, const N: usize>(
     }
     for task in tasks {
         let t = task.await?;
-        for i in 0..N {
+        for i in 0..batch_size {
             outs[i] += t[i];
         }
     }
