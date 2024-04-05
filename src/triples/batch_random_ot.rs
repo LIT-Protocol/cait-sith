@@ -194,7 +194,7 @@ pub async fn batch_random_ot_receiver<C: CSCurve>(
 pub async fn batch_random_ot_receiver_many<C: CSCurve>(
     ctx: Context<'_>,
     mut chan: PrivateChannel,
-    batch_size: usize
+    batch_size: usize,
 ) -> Result<Vec<BatchRandomOTOutputReceiver>, ProtocolError> {
     assert!(batch_size > 0);
     // Step 3
@@ -324,7 +324,9 @@ pub(crate) fn run_batch_random_ot<C: CSCurve>(
 
 /// Run the batch random OT many protocol between two parties.
 #[allow(dead_code)]
-pub(crate) fn run_batch_random_ot_many<C: CSCurve>(batch_size: usize) -> Result<
+pub(crate) fn run_batch_random_ot_many<C: CSCurve>(
+    batch_size: usize,
+) -> Result<
     (
         Vec<BatchRandomOTOutputSender>,
         Vec<BatchRandomOTOutputReceiver>,
@@ -341,11 +343,19 @@ pub(crate) fn run_batch_random_ot_many<C: CSCurve>(batch_size: usize) -> Result<
         r,
         &mut make_protocol(
             ctx_s.clone(),
-            batch_random_ot_sender_many::<C>(ctx_s.clone(), ctx_s.private_channel(s, r), batch_size),
+            batch_random_ot_sender_many::<C>(
+                ctx_s.clone(),
+                ctx_s.private_channel(s, r),
+                batch_size,
+            ),
         ),
         &mut make_protocol(
             ctx_r.clone(),
-            batch_random_ot_receiver_many::<C>(ctx_r.clone(), ctx_r.private_channel(r, s), batch_size),
+            batch_random_ot_receiver_many::<C>(
+                ctx_r.clone(),
+                ctx_r.private_channel(r, s),
+                batch_size,
+            ),
         ),
     )
 }

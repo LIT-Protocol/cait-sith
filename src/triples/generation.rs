@@ -548,7 +548,7 @@ async fn do_generation_many<C: CSCurve>(
             me,
             e0_v,
             f0_v,
-            batch_size
+            batch_size,
         )
     };
     let multiplication_task = ctx.spawn(fut);
@@ -1056,7 +1056,7 @@ pub fn generate_triple_many<C: CSCurve>(
     participants: &[Participant],
     me: Participant,
     threshold: usize,
-    batch_size: usize
+    batch_size: usize,
 ) -> Result<impl Protocol<Output = TripleGenerationOutputMany<C>>, InitializationError> {
     if participants.len() < 2 {
         return Err(InitializationError::BadParameters(format!(

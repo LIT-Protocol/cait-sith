@@ -60,7 +60,7 @@ pub async fn multiplication_sender_many<'a, C: CSCurve>(
     sid: &[Digest],
     a_iv: &[C::Scalar],
     b_iv: &[C::Scalar],
-    batch_size: usize
+    batch_size: usize,
 ) -> Result<Vec<C::Scalar>, ProtocolError> {
     assert!(batch_size > 0);
     let mut ret = vec![];
@@ -246,7 +246,7 @@ pub async fn multiplication_many<C: CSCurve>(
                         sid_arc.as_slice(),
                         av_iv_arc.as_slice(),
                         bv_iv_arc.as_slice(),
-                        batch_size
+                        batch_size,
                     )
                     .await
                 }
