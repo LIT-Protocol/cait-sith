@@ -445,13 +445,14 @@ async fn do_generation<C: CSCurve>(
     ))
 }
 
-async fn do_generation_many<C: CSCurve, const N: usize>(
+async fn do_generation_many<C: CSCurve>(
     ctx: Context<'_>,
     participants: ParticipantList,
     me: Participant,
     threshold: usize,
+    batch_size: usize,
 ) -> Result<TripleGenerationOutputMany<C>, ProtocolError> {
-    assert!(N > 0);
+    assert!(batch_size > 0);
 
     let mut rng = OsRng;
     let mut chan = ctx.shared_channel();
@@ -475,7 +476,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     let mut big_f_i_v = vec![];
     let mut big_l_i_v = vec![];
 
-    for _ in 0..N {
+    for _ in 0..batch_size {
         // Spec 1.2
         let e: Polynomial<C> = Polynomial::random(&mut rng, threshold);
         let f: Polynomial<C> = Polynomial::random(&mut rng, threshold);
@@ -508,7 +509,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
 
     // Spec 2.1
     let mut all_commitments_vec: Vec<ParticipantMap<Commitment>> = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         let mut m = ParticipantMap::new(&participants);
         m.put(me, my_commitments[i]);
         all_commitments_vec.push(m);
@@ -519,14 +520,14 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
         .any(|all_commitments| !all_commitments.full())
     {
         let (from, commitments): (_, Vec<_>) = chan.recv(wait0).await?;
-        for i in 0..N {
+        for i in 0..batch_size {
             all_commitments_vec[i].put(from, commitments[i]);
         }
     }
 
     // Spec 2.2
     let mut my_confirmations = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         let all_commitments = &all_commitments_vec[i];
         let my_confirmation = hash(all_commitments);
         my_confirmations.push(my_confirmation);
@@ -540,13 +541,14 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
         let ctx = ctx.clone();
         let e0_v: Vec<_> = e_v.iter().map(|e| e.evaluate_zero()).collect();
         let f0_v: Vec<_> = f_v.iter().map(|f| f.evaluate_zero()).collect();
-        multiplication_many::<C, N>(
+        multiplication_many::<C>(
             ctx,
             my_confirmations.clone(),
             participants.clone(),
             me,
             e0_v,
             f0_v,
+            batch_size,
         )
     };
     let multiplication_task = ctx.spawn(fut);
@@ -558,7 +560,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     let mut my_phi_proof0v = vec![];
     let mut my_phi_proof1v = vec![];
 
-    for i in 0..N {
+    for i in 0..batch_size {
         let big_e_i = &big_e_i_v[i];
         let big_f_i = &big_f_i_v[i];
         let e = &e_v[i];
@@ -614,7 +616,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     for p in participants.others(me) {
         let mut a_i_j_v = vec![];
         let mut b_i_j_v = vec![];
-        for i in 0..N {
+        for i in 0..batch_size {
             let e = &e_v[i];
             let f = &f_v[i];
             let a_i_j: ScalarPrimitive<C> = e.evaluate(&p.scalar::<C>()).into();
@@ -626,7 +628,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     }
     let mut a_i_v = vec![];
     let mut b_i_v = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         let e = &e_v[i];
         let f = &f_v[i];
         let a_i = e.evaluate(&me.scalar::<C>());
@@ -655,7 +657,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     let mut big_f_v = vec![];
     let mut big_l_v = vec![];
     let mut big_e_j_zero_v = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         big_e_v.push(big_e_i_v[i].clone());
         big_f_v.push(big_f_i_v[i].clone());
         big_l_v.push(big_l_i_v[i].clone());
@@ -689,7 +691,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
             continue;
         }
 
-        for i in 0..N {
+        for i in 0..batch_size {
             let all_commitments = &all_commitments_vec[i];
             let their_big_e = &their_big_e_v[i];
             let their_big_f = &their_big_f_v[i];
@@ -761,7 +763,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
         if !seen.put(from) {
             continue;
         }
-        for i in 0..N {
+        for i in 0..batch_size {
             let a_j_i = &a_j_i_v[i];
             let b_j_i = &b_j_i_v[i];
             a_i_v[i] += &(*a_j_i).into();
@@ -772,7 +774,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     let mut big_c_i_points = vec![];
     let mut big_c_i_v = vec![];
     let mut my_phi_proofs = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         let big_e = &big_e_v[i];
         let big_f = &big_f_v[i];
         let a_i = &a_i_v[i];
@@ -818,7 +820,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     seen.clear();
     seen.put(me);
     let mut big_c_v = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         big_c_v.push(big_c_i_v[i]);
     }
     while !seen.full() {
@@ -829,7 +831,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
         if !seen.put(from) {
             continue;
         }
-        for i in 0..N {
+        for i in 0..batch_size {
             let big_e_j_zero = &big_e_j_zero_v[i];
             let big_f = &big_f_v[i];
 
@@ -861,7 +863,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     let mut hat_big_c_i_points = vec![];
     let mut hat_big_c_i_v = vec![];
     let mut my_phi_proofs = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         // Spec 4.5
         let l0 = l0_v[i];
         let hat_big_c_i = C::ProjectivePoint::generator() * l0;
@@ -888,7 +890,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
         .await;
 
     // Spec 4.9
-    for i in 0..N {
+    for i in 0..batch_size {
         let l = &mut l_v[i];
         let l0 = &l0_v[i];
         l.set_zero(*l0);
@@ -897,14 +899,14 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     let mut c_i_v = vec![];
     for p in participants.others(me) {
         let mut c_i_j_v = Vec::new();
-        for i in 0..N {
+        for i in 0..batch_size {
             let l = &mut l_v[i];
             let c_i_j: ScalarPrimitive<C> = l.evaluate(&p.scalar::<C>()).into();
             c_i_j_v.push(c_i_j);
         }
         chan.send_private(wait6, p, &c_i_j_v).await;
     }
-    for i in 0..N {
+    for i in 0..batch_size {
         let l = &mut l_v[i];
         let c_i = l.evaluate(&me.scalar::<C>());
         c_i_v.push(c_i);
@@ -914,7 +916,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
     seen.clear();
     seen.put(me);
     let mut hat_big_c_v = vec![];
-    for i in 0..N {
+    for i in 0..batch_size {
         hat_big_c_v.push(hat_big_c_i_v[i]);
     }
 
@@ -926,7 +928,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
         if !seen.put(from) {
             continue;
         }
-        for i in 0..N {
+        for i in 0..batch_size {
             let their_hat_big_c = their_hat_big_c_i_points[i].to_projective();
             let their_phi_proof = &their_phi_proofs[i];
 
@@ -946,7 +948,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
         }
     }
 
-    for i in 0..N {
+    for i in 0..batch_size {
         let big_l = &mut big_l_v[i];
         let hat_big_c = &hat_big_c_v[i];
         let big_c = &big_c_v[i];
@@ -970,7 +972,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
         if !seen.put(from) {
             continue;
         }
-        for i in 0..N {
+        for i in 0..batch_size {
             let c_j_i = c_j_i_v[i];
             c_i_v[i] += C::Scalar::from(c_j_i);
         }
@@ -978,7 +980,7 @@ async fn do_generation_many<C: CSCurve, const N: usize>(
 
     let mut ret = vec![];
     // Spec 5.7
-    for i in 0..N {
+    for i in 0..batch_size {
         let big_l = &big_l_v[i];
         let c_i = &c_i_v[i];
         let a_i = &a_i_v[i];
@@ -1050,10 +1052,11 @@ pub fn generate_triple<C: CSCurve>(
 }
 
 /// As [`generate_triple`] but for many triples at once
-pub fn generate_triple_many<C: CSCurve, const N: usize>(
+pub fn generate_triple_many<C: CSCurve>(
     participants: &[Participant],
     me: Participant,
     threshold: usize,
+    batch_size: usize,
 ) -> Result<impl Protocol<Output = TripleGenerationOutputMany<C>>, InitializationError> {
     if participants.len() < 2 {
         return Err(InitializationError::BadParameters(format!(
@@ -1073,7 +1076,7 @@ pub fn generate_triple_many<C: CSCurve, const N: usize>(
     })?;
 
     let ctx = Context::new();
-    let fut = do_generation_many::<C, N>(ctx.clone(), participants, me, threshold);
+    let fut = do_generation_many::<C>(ctx.clone(), participants, me, threshold, batch_size);
     Ok(make_protocol(ctx, fut))
 }
 
