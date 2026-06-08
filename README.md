@@ -1,3 +1,10 @@
+<!-- lit-archived-banner -->
+> ⚠️ **This repository is archived and is no longer maintained.**
+>
+> Lit Protocol has kept it publicly available for **educational and reference purposes only**. Code here may be out of date and is not supported.
+
+---
+
 # Cait-Sith [![](https://img.shields.io/crates/v/cait-sith.svg)](https://crates.io/crates/cait-sith) [![](https://docs.rs/cait-sith/badge.svg)](https://docs.rs/cait-sith)
 
 Cait-Sith is a novel threshold ECDSA protocol (and implementation),
